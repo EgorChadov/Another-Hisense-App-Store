@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Another Hisense App Store</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <div class="container">
+        <h1>Another Hisense App Store</h1>
+        <div id="app-grid" class="app-grid">
+            <p id="loading-message" class="status-message">Loading Apps...</p>
+        </div>
+    </div>
+
+<script>
+// ===== Helpers =====
+function createTile(app, isInstalled) {
+    const container = document.getElementById("app-grid");
+    const tile = document.createElement("div");
+    tile.className = "app-tile";
+    if (isInstalled) tile.classList.add("installed");
+
+    // icon
+    const iconWrapper = document.createElement("div");
+    iconWrapper.className = "app-icon-placeholder";
+
+    const img = document.createElement("img");
+    img.alt = app.name;
+    img.onload = function() {
+        iconWrapper.innerHTML = '';
+        iconWrapper.appendChild(this);
+    };
+    img.onerror = function() {
+        iconWrapper.innerHTML = '';
+        iconWrapper.textContent = app.name ? app.name.charAt(0).toUpperCase() : '?';
+    };
+    img.src = app.thumbnail_url || "";
+
+    // title
+    const title = document.createElement("div");
+    title.className = "app-title";
+    title.textContent = app.name;
+
+    // description
+    const desc = document.createElement("div");
+    desc.className = "app-text";
+    desc.textContent = app.text || "";
+
+    // button
+    const button = document.createElement("button");
+    button.className = "install-button";
+    if (isInstalled) {
+        button.textContent = "Uninstall";
+        button.onclick = () => handleUninstall(app, button, tile);
+    } else {
+        button.textContent = "Install";
+        button.onclick = () => handleInstall(app, button, tile);
+    }
+
+    // assemble
+    tile.appendChild(iconWrapper);
+    tile.appendChild(title);
+    tile.appendChild(desc);
+    tile.appendChild(button);
+    container.appendChild(tile);
+
+    return tile;
+}
+
+// ===== Core API wrappers =====
+function installApp(app, onSuccess, onError) {
+    try {
+        if (typeof Hisense_installApp === "function") {
+            Hisense_installApp(
+                app.install_app_id,
+                app.name,
+                app.thumbnail_url,
+                app.thumbnail_url,
+                app.thumbnail_url,
+                app.url,
+                app.store_type,
+                function (res) {
+                    if (!res || res === 0 || res === "0" || res === true) {
+                        onSuccess && onSuccess();
+                    } else {
+                        onError && onError(res);
+                    }
+                }
+            );
+        } else {
+            // Development mock or error
+            console.warn("Hisense_installApp API unavailable");
+             // Un-comment to simulate success on PC:
+             // onSuccess && onSuccess(); return; 
+            throw new Error("Hisense_installApp API unavailable");
+        }
+    } catch (e) {
+        console.error("installApp error:", e);
+        onError && onError(e);
+    }
+}
+
+function uninstallApp(app, onSuccess, onError) {
+    try {
+        if (typeof Hisense_uninstallApp === "function") {
+            Hisense_uninstallApp(app.install_app_id, function (res) {
+                if (!res || res === 0 || res === "0" || res === true) {
+                    onSuccess && onSuccess();
+                } else {
+                    onError && onError(res);
+                }
+            });
+        } else {
+            throw new Error("Hisense_uninstallApp API unavailable");
+        }
+    } catch (e) {
+        console.error("uninstallApp error:", e);
+        onError && onError(e);
+    }
+}
+
+// ===== Handlers =====
+function handleInstall(app, button, tile) {
+    console.log("Installing:", app.name);
+    button.textContent = "Installing...";
+    button.disabled = true;
+
+    installApp(
+        app,
+        () => {
+            console.log(`Application '${app.name}' installed successfully.`);
+            tile.classList.add("installed");
+            button.textContent = "Uninstall";
+            button.disabled = false;
+            button.onclick = () => handleUninstall(app, button, tile);
+        },
+        (err) => {
+            console.error("Install error:", err);
+            button.textContent = "Install";
+            button.disabled = false;
+        }
+    );
+}
+
+function handleUninstall(app, button, tile) {
+    console.log("Uninstalling:", app.name);
+    button.textContent = "Uninstalling...";
+    button.disabled = true;
+
+    uninstallApp(
+        app,
+        () => {
+            console.log(`Application '${app.name}' uninstalled successfully.`);
+            tile.classList.remove("installed");
+            button.textContent = "Install";
+            button.disabled = false;
+            button.onclick = () => handleInstall(app, button, tile);
+        },
+        (err) => {
+            console.error("Uninstall error:", err);
+            button.textContent = "Uninstall";
+            button.disabled = false;
+        }
+    );
+}
+
+// ===== Init =====
+async function loadApps() {
+    console.log("loadApps started");
+    try {
+        // Wait for Hisense API or timeout
+        const installedIds = await new Promise((resolve) => {
+            try {
+                if (typeof Hisense_getInstalledApps === "function") {
+                    const timeoutId = setTimeout(() => {
+                        console.warn("Hisense_getInstalledApps timed out");
+                        resolve([]);
+                    }, 5000);
+
+                    Hisense_getInstalledApps(function (res) {
+                        clearTimeout(timeoutId);
+                        if (res && res.AppInfo) {
+                            const ids = res.AppInfo.map((a) => ({
+                                id: (a.Id || a.appId || "").toLowerCase(),
+                                name: (a.AppName || "").toLowerCase(),
+                                url: (a.URL || "").toLowerCase(),
+                            }));
+                            resolve(ids);
+                        } else {
+                            resolve([]);
+                        }
+                    });
+                } else {
+                    console.log("Hisense_getInstalledApps not available");
+                    resolve([]);
+                }
+            } catch (e) {
+                console.error("Hisense API error:", e);
+                resolve([]);
+            }
+        });
+
+        const resp = await fetch("/apps");
+        const apps = await resp.json();
+
+        renderApps(apps, installedIds);
+
+    } catch (e) {
+        console.error("Error loading apps:", e);
+        const msg = document.getElementById("loading-message");
+        if(msg) msg.textContent = "Error loading apps.";
+    }
+}
+
+function renderApps(apps, installedIds) {
+    const container = document.getElementById("app-grid");
+    container.innerHTML = "";
+    apps.forEach((app) => {
+        const isInstalled = installedIds.some(inst =>
+            inst.id === app.install_app_id.toLowerCase() ||
+            inst.name === app.name.toLowerCase() ||
+            (app.url && inst.url === app.url.toLowerCase())
+        );
+        createTile(app, isInstalled);
+    });
+}
+
+window.addEventListener("DOMContentLoaded", loadApps);
+</script>
+</body>
+</html>
