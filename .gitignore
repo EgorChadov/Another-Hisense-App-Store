@@ -22,3 +22,4 @@ cert.pem
 # OS
 .DS_Store
 Thumbs.db
+/app/img_parser/

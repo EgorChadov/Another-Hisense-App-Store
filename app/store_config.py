@@ -371,4 +371,10 @@ APP_LIST: List[App] = [
         url='https://jellyfin-vidaa.vercel.app/',
         text='Бесплатный и свободный медиасервер.'
     ),
+    App(
+        appid='spotify',
+        name='spotify',
+        url='https://open.spotify.com/',
+        text='Spotify Web App.'
+    ),
 ]

@@ -14,7 +14,54 @@
         </div>
     </div>
 
+    <!-- Debug panel -->
+    <div id="debug-panel" style="position:fixed; bottom:10px; right:10px; width:400px; max-height:150px; overflow-y:auto; background:rgba(0,0,0,0.85); color:#0f0; font-family:monospace; font-size:11px; padding:8px; border-radius:8px; border:1px solid #0f0;"></div>
+
 <script>
+// ===== Debug =====
+const logQueue = [];
+let logSending = false;
+
+// Show on TV + send to server
+function debugLog(msg) {
+    const panel = document.getElementById("debug-panel");
+    const time = new Date().toLocaleTimeString();
+    const text = typeof msg === 'object' ? JSON.stringify(msg) : msg;
+
+    // Show on screen
+    const line = document.createElement("div");
+    line.textContent = `[${time}] ${text}`;
+    panel.appendChild(line);
+    panel.scrollTop = panel.scrollHeight;
+
+    // Queue for server
+    logQueue.push(text);
+    sendNextLog();
+}
+
+// Only send to server (not shown on TV)
+function serverLog(msg) {
+    const text = typeof msg === 'object' ? JSON.stringify(msg) : msg;
+    logQueue.push(text);
+    sendNextLog();
+}
+
+function sendNextLog() {
+    if (logSending || logQueue.length === 0) return;
+    logSending = true;
+    const msg = logQueue.shift();
+    setTimeout(() => {
+        fetch("/log", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({message: msg})
+        }).catch(() => {}).finally(() => {
+            logSending = false;
+            sendNextLog();
+        });
+    }, 0);
+}
+
 // ===== Helpers =====
 function createTile(app, isInstalled) {
     const container = document.getElementById("app-grid");
@@ -123,21 +170,23 @@ function uninstallApp(app, onSuccess, onError) {
 
 // ===== Handlers =====
 function handleInstall(app, button, tile) {
-    console.log("Installing:", app.name);
+    serverLog("Installing: " + app.name);
     button.textContent = "Installing...";
     button.disabled = true;
 
     installApp(
         app,
         () => {
-            console.log(`Application '${app.name}' installed successfully.`);
+            debugLog("Installed: " + app.name);
+            serverLog("Install success: " + app.name);
             tile.classList.add("installed");
             button.textContent = "Uninstall";
             button.disabled = false;
             button.onclick = () => handleUninstall(app, button, tile);
         },
         (err) => {
-            console.error("Install error:", err);
+            debugLog("Install failed: " + app.name);
+            serverLog("Install error for " + app.name + ": " + JSON.stringify(err));
             button.textContent = "Install";
             button.disabled = false;
         }
@@ -145,21 +194,23 @@ function handleInstall(app, button, tile) {
 }
 
 function handleUninstall(app, button, tile) {
-    console.log("Uninstalling:", app.name);
+    serverLog("Uninstalling: " + app.name);
     button.textContent = "Uninstalling...";
     button.disabled = true;
 
     uninstallApp(
         app,
         () => {
-            console.log(`Application '${app.name}' uninstalled successfully.`);
+            debugLog("Uninstalled: " + app.name);
+            serverLog("Uninstall success: " + app.name);
             tile.classList.remove("installed");
             button.textContent = "Install";
             button.disabled = false;
             button.onclick = () => handleInstall(app, button, tile);
         },
         (err) => {
-            console.error("Uninstall error:", err);
+            debugLog("Uninstall failed: " + app.name);
+            serverLog("Uninstall error for " + app.name + ": " + JSON.stringify(err));
             button.textContent = "Uninstall";
             button.disabled = false;
         }
@@ -168,47 +219,89 @@ function handleUninstall(app, button, tile) {
 
 // ===== Init =====
 async function loadApps() {
-    console.log("loadApps started");
+    serverLog("loadApps started");
     try {
         // Wait for Hisense API or timeout
         const installedIds = await new Promise((resolve) => {
             try {
                 if (typeof Hisense_getInstalledApps === "function") {
+                    serverLog("Hisense_getInstalledApps found, calling...");
                     const timeoutId = setTimeout(() => {
-                        console.warn("Hisense_getInstalledApps timed out");
+                        debugLog("API timeout");
+                        serverLog("Hisense_getInstalledApps TIMEOUT after 5s");
                         resolve([]);
                     }, 5000);
 
-                    Hisense_getInstalledApps(function (res) {
+                    Hisense_getInstalledApps(function (...args) {
                         clearTimeout(timeoutId);
+                        serverLog("Callback received, args count: " + args.length);
+                        serverLog("ARG0 type: " + typeof args[0]);
+                        serverLog("ARG1 type: " + typeof args[1]);
+
+                        // Data is in args[1], may be string or object
+                        let res = args[1] || args[0];
+
+                        // Parse if string
+                        if (typeof res === 'string') {
+                            serverLog("Response is string, parsing JSON...");
+                            try {
+                                res = JSON.parse(res);
+                                serverLog("JSON parsed successfully");
+                            } catch (e) {
+                                debugLog("Parse error");
+                                serverLog("JSON parse error: " + e);
+                            }
+                        }
+
                         if (res && res.AppInfo) {
+                            serverLog("AppInfo found, count: " + res.AppInfo.length);
+                            serverLog("AppInfo data: " + JSON.stringify(res.AppInfo));
                             const ids = res.AppInfo.map((a) => ({
-                                id: (a.Id || a.appId || "").toLowerCase(),
-                                name: (a.AppName || "").toLowerCase(),
-                                url: (a.URL || "").toLowerCase(),
+                                id: (a.Id || a.appId || a.id || "").toLowerCase(),
+                                name: (a.AppName || a.name || "").toLowerCase(),
+                                url: (a.URL || a.url || "").toLowerCase(),
                             }));
+                            serverLog("Parsed IDs: " + JSON.stringify(ids));
+                            resolve(ids);
+                        } else if (Array.isArray(res)) {
+                            serverLog("Response is array, count: " + res.length);
+                            const ids = res.map((a) => ({
+                                id: (a.Id || a.appId || a.id || "").toLowerCase(),
+                                name: (a.AppName || a.name || "").toLowerCase(),
+                                url: (a.URL || a.url || "").toLowerCase(),
+                            }));
+                            serverLog("Parsed IDs: " + JSON.stringify(ids));
                             resolve(ids);
                         } else {
+                            serverLog("No usable data, res type: " + typeof res);
                             resolve([]);
                         }
                     });
                 } else {
-                    console.log("Hisense_getInstalledApps not available");
+                    debugLog("Hisense API not available");
+                    serverLog("Hisense_getInstalledApps is NOT a function");
                     resolve([]);
                 }
             } catch (e) {
-                console.error("Hisense API error:", e);
+                debugLog("API error");
+                serverLog("Hisense API exception: " + e.message + " | " + e.stack);
                 resolve([]);
             }
         });
 
+        serverLog("Fetching /apps...");
         const resp = await fetch("/apps");
+        serverLog("Fetch response status: " + resp.status);
         const apps = await resp.json();
+        serverLog("Got " + apps.length + " apps from server");
 
         renderApps(apps, installedIds);
+        debugLog("Loaded " + apps.length + " apps, " + installedIds.length + " installed");
+        serverLog("renderApps completed");
 
     } catch (e) {
-        console.error("Error loading apps:", e);
+        debugLog("ERROR: " + e.message);
+        serverLog("loadApps error: " + e.message + " | " + e.stack);
         const msg = document.getElementById("loading-message");
         if(msg) msg.textContent = "Error loading apps.";
     }

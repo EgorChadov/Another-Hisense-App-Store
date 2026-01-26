@@ -1,7 +1,7 @@
 import os
 from typing import List
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -81,3 +81,15 @@ async def read_index_page():
         return HTMLResponse(content="<h1>Error: index.html not found.</h1>", status_code=500)
     except Exception as e:
         return HTMLResponse(content=f"<h1>Server error</h1><p>{e}</p>", status_code=500)
+
+
+@app.post("/log")
+async def receive_log(request: Request):
+    """Receive debug logs from TV client."""
+    try:
+        data = await request.json()
+        print(f"[TV LOG] {data.get('message', data)}")
+        return {"status": "ok"}
+    except Exception as e:
+        print(f"[TV LOG ERROR] {e}")
+        return {"status": "error"}

@@ -170,6 +170,15 @@ h1 {
     border: 1px solid #28a745; /* зелёная рамка */
     box-shadow: 0 0 10px rgba(40, 167, 69, 0.5);
 }
+
+.app-tile.installed button.install-button {
+    background-color: #dc3545; /* красный для удаления */
+}
+
+.app-tile.installed button.install-button:hover,
+.app-tile.installed button.install-button:focus {
+    background-color: #c82333;
+}
 .install-overlay {
   display: inline-block;
   margin-top: 8px;

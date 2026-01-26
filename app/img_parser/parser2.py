@@ -154,6 +154,8 @@ HISENSE_APP_LIST = [
      'text': 'Приложение для просмотра пакетов Цифрового телевидения от компании Севстар'},
     {'appid': 'anb_focustv', 'name': 'Фокус Лайф', 'url': 'http://tv.focus.life/',
      'text': 'Приложение для просмотра пакетов Цифрового телевидения от компании Фокус Лайф'},
+    {'appid': 'spotify', 'name': 'Spotify', 'url': 'https://open.spotify.com/',
+     'text': 'Spotify'},
 ]  # Конец HISENSE_APP_LIST
 
 UI_IMAGE_BASE_URL = 'https://vidaa.surge.sh/images_ui/'
@@ -165,7 +167,7 @@ from app.main import BASE_DIR
 STATIC_DIR = os.path.join(BASE_DIR, "static")
 IMAGES_DIR = os.path.join(STATIC_DIR, "images")
 # --- Конфигурация для нового скрипта ---
-OUTPUT_DIR_BASE = os.path.join(IMAGES_DIR, "hisense_icons_collection_v3")
+OUTPUT_DIR_BASE = os.path.join(IMAGES_DIR, "hisense_icons_collection_v4")
 OUTPUT_DIR_UI = os.path.join(OUTPUT_DIR_BASE, 'ui_icons')
 OUTPUT_DIR_THUMBNAILS = os.path.join(OUTPUT_DIR_BASE, 'thumbnail_icons')
 
