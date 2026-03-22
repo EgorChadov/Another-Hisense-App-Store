@@ -39,7 +39,7 @@ def generate_self_signed_cert():
         subject = issuer = x509.Name([
             x509.NameAttribute(NameOID.COUNTRY_NAME, "RU"),
             x509.NameAttribute(NameOID.ORGANIZATION_NAME, "Hisense App Store"),
-            x509.NameAttribute(NameOID.COMMON_NAME, "localhost"),
+            x509.NameAttribute(NameOID.COMMON_NAME, "vidaahub.com"),
         ])
 
         cert = (
@@ -52,8 +52,9 @@ def generate_self_signed_cert():
             .not_valid_after(datetime.datetime.utcnow() + datetime.timedelta(days=365))
             .add_extension(
                 x509.SubjectAlternativeName([
+                    x509.DNSName("vidaahub.com"),
+                    x509.DNSName("*.vidaahub.com"),
                     x509.DNSName("localhost"),
-                    x509.DNSName("*.local"),
                     x509.IPAddress(ipaddress.IPv4Address("127.0.0.1")),
                 ]),
                 critical=False,
