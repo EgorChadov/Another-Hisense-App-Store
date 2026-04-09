@@ -9,15 +9,42 @@
 <body>
     <div class="container">
         <h1>Another Hisense App Store</h1>
+        <div id="category-nav" class="category-nav"></div>
         <div id="app-grid" class="app-grid">
             <p id="loading-message" class="status-message">Loading Apps...</p>
         </div>
     </div>
 
+    <div id="toast-container"></div>
+
     <!-- Debug panel -->
-    <div id="debug-panel" style="position:fixed; bottom:10px; right:10px; width:400px; max-height:150px; overflow-y:auto; background:rgba(0,0,0,0.85); color:#0f0; font-family:monospace; font-size:11px; padding:8px; border-radius:8px; border:1px solid #0f0;"></div>
+    <div id="debug-panel" style="position:fixed; bottom:10px; right:10px; width:400px; max-height:150px; overflow-y:auto; background:rgba(0,0,0,0.85); color:#0f0; font-family:monospace; font-size:11px; padding:8px; border-radius:8px; border:1px solid #0f0; z-index:9999;"></div>
 
 <script>
+// ===== Toast Notifications =====
+function showToast(message, type = 'info') {
+    const container = document.getElementById("toast-container");
+    const toast = document.createElement("div");
+    toast.className = `toast ${type}`;
+    toast.textContent = message;
+
+    container.appendChild(toast);
+
+    // Trigger reflow
+    void toast.offsetWidth;
+
+    toast.classList.add("show");
+
+    setTimeout(() => {
+        toast.classList.remove("show");
+        setTimeout(() => {
+            if (toast.parentElement) {
+                toast.parentElement.removeChild(toast);
+            }
+        }, 300);
+    }, 3000);
+}
+
 // ===== Debug =====
 const logQueue = [];
 let logSending = false;
@@ -61,6 +88,145 @@ function sendNextLog() {
         });
     }, 0);
 }
+
+// ===== Spatial Navigation =====
+let allApps = [];
+let filteredApps = [];
+let installedAppsData = [];
+let categories = [];
+let currentCategory = "All";
+let navMode = 'grid'; // 'nav' (categories) or 'grid' (apps)
+let focusIndex = 0; // index in current navMode
+
+// TV Key Codes
+const VK_LEFT = 37;
+const VK_UP = 38;
+const VK_RIGHT = 39;
+const VK_DOWN = 40;
+const VK_ENTER = 13;
+const VK_RED = 403; // Typical code for Red button on TV
+
+function handleKeydown(e) {
+    const code = e.keyCode;
+
+    if (code === VK_RED) {
+        const panel = document.getElementById("debug-panel");
+        panel.style.display = panel.style.display === "block" ? "none" : "block";
+        return;
+    }
+
+    if (code === VK_ENTER) {
+        if (navMode === 'nav') {
+            const btns = document.querySelectorAll(".category-btn");
+            if (btns[focusIndex]) {
+                btns[focusIndex].click();
+            }
+        } else if (navMode === 'grid') {
+            const tiles = document.querySelectorAll(".app-tile");
+            if (tiles[focusIndex]) {
+                const btn = tiles[focusIndex].querySelector("button");
+                if (btn && !btn.disabled) btn.click();
+            }
+        }
+        e.preventDefault();
+        return;
+    }
+
+    if (navMode === 'nav') {
+        const btns = document.querySelectorAll(".category-btn");
+        const maxIndex = btns.length - 1;
+        let changed = false;
+
+        if (code === VK_RIGHT) {
+            focusIndex = Math.min(focusIndex + 1, maxIndex);
+            changed = true;
+        } else if (code === VK_LEFT) {
+            focusIndex = Math.max(focusIndex - 1, 0);
+            changed = true;
+        } else if (code === VK_DOWN) {
+            if (filteredApps.length > 0) {
+                navMode = 'grid';
+                focusIndex = 0;
+                changed = true;
+            }
+        }
+
+        if (changed) {
+            updateFocus();
+            e.preventDefault();
+        }
+    } else if (navMode === 'grid') {
+        const tiles = document.querySelectorAll(".app-tile");
+        const maxIndex = tiles.length - 1;
+        if (maxIndex < 0) return;
+
+        // Calculate columns based on layout (rough estimate)
+        const containerWidth = document.getElementById("app-grid").offsetWidth;
+        const tileWidth = tiles[0].offsetWidth + 22; // width + gap
+        const columns = Math.max(1, Math.floor(containerWidth / tileWidth));
+
+        let changed = false;
+
+        if (code === VK_RIGHT) {
+            if (focusIndex < maxIndex) {
+                focusIndex++;
+                changed = true;
+            }
+        } else if (code === VK_LEFT) {
+            if (focusIndex > 0) {
+                focusIndex--;
+                changed = true;
+            }
+        } else if (code === VK_DOWN) {
+            if (focusIndex + columns <= maxIndex) {
+                focusIndex += columns;
+                changed = true;
+            } else if (focusIndex < maxIndex) {
+                focusIndex = maxIndex;
+                changed = true;
+            }
+        } else if (code === VK_UP) {
+            if (focusIndex - columns >= 0) {
+                focusIndex -= columns;
+                changed = true;
+            } else {
+                navMode = 'nav';
+                // Try to focus the active category
+                const btns = document.querySelectorAll(".category-btn");
+                focusIndex = 0;
+                btns.forEach((btn, i) => {
+                    if (btn.classList.contains("active")) focusIndex = i;
+                });
+                changed = true;
+            }
+        }
+
+        if (changed) {
+            updateFocus();
+            // scroll to element
+            if (navMode === 'grid' && tiles[focusIndex]) {
+                tiles[focusIndex].scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+            e.preventDefault();
+        }
+    }
+}
+
+function updateFocus() {
+    document.querySelectorAll(".category-btn, .app-tile").forEach(el => el.classList.remove("focus"));
+
+    if (navMode === 'nav') {
+        const btns = document.querySelectorAll(".category-btn");
+        if (btns[focusIndex]) btns[focusIndex].classList.add("focus");
+    } else if (navMode === 'grid') {
+        const tiles = document.querySelectorAll(".app-tile");
+        if (tiles[focusIndex]) tiles[focusIndex].classList.add("focus");
+    }
+}
+
+// Attach event listener
+document.addEventListener('keydown', handleKeydown);
+
 
 // ===== Helpers =====
 function createTile(app, isInstalled) {
@@ -179,6 +345,7 @@ function handleInstall(app, button, tile) {
         () => {
             debugLog("Installed: " + app.name);
             serverLog("Install success: " + app.name);
+            showToast(`${app.name} successfully installed!`, 'success');
             tile.classList.add("installed");
             button.textContent = "Uninstall";
             button.disabled = false;
@@ -187,6 +354,7 @@ function handleInstall(app, button, tile) {
         (err) => {
             debugLog("Install failed: " + app.name);
             serverLog("Install error for " + app.name + ": " + JSON.stringify(err));
+            showToast(`Failed to install ${app.name}`, 'error');
             button.textContent = "Install";
             button.disabled = false;
         }
@@ -203,6 +371,7 @@ function handleUninstall(app, button, tile) {
         () => {
             debugLog("Uninstalled: " + app.name);
             serverLog("Uninstall success: " + app.name);
+            showToast(`${app.name} uninstalled.`, 'info');
             tile.classList.remove("installed");
             button.textContent = "Install";
             button.disabled = false;
@@ -211,10 +380,75 @@ function handleUninstall(app, button, tile) {
         (err) => {
             debugLog("Uninstall failed: " + app.name);
             serverLog("Uninstall error for " + app.name + ": " + JSON.stringify(err));
+            showToast(`Failed to uninstall ${app.name}`, 'error');
             button.textContent = "Uninstall";
             button.disabled = false;
         }
     );
+}
+
+// ===== Render and Filtering =====
+function renderCategories() {
+    const nav = document.getElementById("category-nav");
+    nav.innerHTML = "";
+
+    // Add "All" category
+    const allBtn = document.createElement("button");
+    allBtn.className = `category-btn ${currentCategory === "All" ? "active" : ""}`;
+    allBtn.textContent = "Все";
+    allBtn.onclick = () => filterByCategory("All");
+    nav.appendChild(allBtn);
+
+    categories.forEach(cat => {
+        if (!cat) return;
+        const btn = document.createElement("button");
+        btn.className = `category-btn ${currentCategory === cat ? "active" : ""}`;
+        btn.textContent = cat;
+        btn.onclick = () => filterByCategory(cat);
+        nav.appendChild(btn);
+    });
+}
+
+function filterByCategory(category) {
+    currentCategory = category;
+    renderCategories();
+
+    if (category === "All") {
+        filteredApps = [...allApps];
+    } else {
+        filteredApps = allApps.filter(app => app.category === category);
+    }
+
+    renderApps(filteredApps, installedAppsData);
+
+    // Reset focus if needed
+    if (navMode === 'nav') {
+        const btns = document.querySelectorAll(".category-btn");
+        focusIndex = Array.from(btns).findIndex(b => b.classList.contains("active"));
+        if (focusIndex === -1) focusIndex = 0;
+    } else {
+        focusIndex = 0;
+    }
+    updateFocus();
+}
+
+function renderApps(appsToRender, installedIds) {
+    const container = document.getElementById("app-grid");
+    container.innerHTML = "";
+
+    if (appsToRender.length === 0) {
+        container.innerHTML = '<p class="status-message">No apps found in this category.</p>';
+        return;
+    }
+
+    appsToRender.forEach((app) => {
+        const isInstalled = installedIds.some(inst =>
+            inst.id === app.install_app_id.toLowerCase() ||
+            inst.name === app.name.toLowerCase() ||
+            (app.url && inst.url === app.url.toLowerCase())
+        );
+        createTile(app, isInstalled);
+    });
 }
 
 // ===== Init =====
@@ -292,11 +526,26 @@ async function loadApps() {
         serverLog("Fetching /apps...");
         const resp = await fetch("/apps");
         serverLog("Fetch response status: " + resp.status);
-        const apps = await resp.json();
-        serverLog("Got " + apps.length + " apps from server");
+        allApps = await resp.json();
+        installedAppsData = installedIds;
+        serverLog("Got " + allApps.length + " apps from server");
 
-        renderApps(apps, installedIds);
-        debugLog("Loaded " + apps.length + " apps, " + installedIds.length + " installed");
+        // Extract categories
+        const catSet = new Set();
+        allApps.forEach(app => {
+            if (app.category) catSet.add(app.category);
+        });
+        categories = Array.from(catSet).sort();
+
+        // Initial render
+        filterByCategory("All");
+
+        // Initial focus setup
+        navMode = 'nav';
+        focusIndex = 0;
+        updateFocus();
+
+        debugLog("Loaded " + allApps.length + " apps, " + installedIds.length + " installed");
         serverLog("renderApps completed");
 
     } catch (e) {
@@ -307,18 +556,6 @@ async function loadApps() {
     }
 }
 
-function renderApps(apps, installedIds) {
-    const container = document.getElementById("app-grid");
-    container.innerHTML = "";
-    apps.forEach((app) => {
-        const isInstalled = installedIds.some(inst =>
-            inst.id === app.install_app_id.toLowerCase() ||
-            inst.name === app.name.toLowerCase() ||
-            (app.url && inst.url === app.url.toLowerCase())
-        );
-        createTile(app, isInstalled);
-    });
-}
 
 window.addEventListener("DOMContentLoaded", loadApps);
 </script>
